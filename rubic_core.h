@@ -54,7 +54,7 @@
 using namespace std;
 
 // ******************************************
-// INCLUDES DE LOS MÓDULOS
+// INCLUDES DE LOS MÓDULOS //
 #include "key_manager.h"
 #include "share_manager.h"
 #include "universal_cipher.h"
@@ -89,7 +89,7 @@ constexpr size_t ARGON2_PARALLELISM = 4;
 constexpr int MASTER_KEY_SIZE = 32;
 
 // **************************************
-// BLOQUEO-DE-MEMORIA-mlock
+// BLOQUEO-DE-MEMORIA-mlock //
 
 class Memguardin {
 private:
@@ -121,7 +121,7 @@ public:
 bool Memguardin::mlock_active = false;
 
 // ****************************************
-// MANEJADOR-DE-CRASH
+// MANEJADOR-DE-CRASH //
 
 class CrashHnd {
 public:
@@ -146,7 +146,7 @@ public:
 };
 
 // *****************************************
-// LIMPIEZA-DE-MEMORIA
+// LIMPIEZA-DE-MEMORIA //
 
 inline void secure_z(void* ptr, size_t len) {
     if (ptr && len > 0) {
@@ -257,7 +257,7 @@ bool PwdReader::termios_saved = false;
 struct termios PwdReader::old_termios;
 
 // ********************************************
-// UTILIDADES-DE-ARCHIVOS Y XDG DE RUTAS
+// UTILIDADES-DE-ARCHIVOS Y XDG DE RUTAS //
 
 
 namespace XDG {
@@ -397,7 +397,7 @@ namespace FileUtil {
 };
 
 // *******************************************
-// OPERACIONES-CRIPTOGRAFICAS
+// OPERACIONES-CRIPTOGRAFICAS //
 
 namespace Crypto {
     inline Botan::secure_vector<uint8_t> rand_bytes(size_t n) {
@@ -547,7 +547,7 @@ namespace Crypto {
 };
 
 // ***************************************************
-// GESTOR-DE--DILITHIUM-PQC
+// GESTOR-DE--DILITHIUM-PQC //
 
 class DiliID {
 private:
@@ -620,7 +620,7 @@ public:
 };
 
 // *****************************************
-// REGISTRO-DE-USUARIO
+// REGISTRO-DE-USUARIO // 
 
 struct UserRec {
     string name_hash;
@@ -697,7 +697,7 @@ struct UserRec {
 
 
 // ******************************************
-// GESTOR-PRINCIPAL-DE-USUARIOS-SISTEMA
+// GESTOR-PRINCIPAL-DE-USUARIOS-SISTEMA //
 
 class UserMgr {
 private:
@@ -914,20 +914,20 @@ private:
         string path = user_path(rec.name_hash);
         return FileUtil::write_all(path, enc.data(), enc.size());
     }
-    //logo
+    //logo xd 
     void print_banner() {
-        cout << BRIGHT_BLUE;
-        cout << "\n┌─────────────────────────────────────────────────────────────────────┐\n";
-        cout << "│" << BRIGHT_GREEN << "   ██████╗ ██╗   ██╗██████╗ ██╗ ██████╗         " << BRIGHT_BLUE << "                     │\n";
-        cout << "│" << BRIGHT_GREEN << "   ██╔══██╗██║   ██║██╔══██╗██║██╔════╝         " << BRIGHT_BLUE << "                     │\n";
-        cout << "│" << BRIGHT_GREEN << "   ██████╔╝██║   ██║██████╔╝██║██║              " << BRIGHT_BLUE << "                     │\n";
-        cout << "│" << BRIGHT_GREEN << "   ██╔══██╗██║   ██║██╔══██╗██║██║              " << BRIGHT_BLUE << "                     │\n";
-        cout << "│" << BRIGHT_GREEN << "   ██║  ██║╚██████╔╝██████╔╝██║╚██████╗         " << BRIGHT_BLUE << "                     │\n";
-        cout << "│" << BRIGHT_GREEN << "   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝ ╚═════╝         " << BRIGHT_BLUE << "                     │\n";
-        cout << "│                                                                     │\n";
-        cout << "│" << BRIGHT_MAGENTA << "        SISTEMA DE CIFRADO- v1.0             " << BRIGHT_BLUE << "                        │\n";
-        cout << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
-    }
+    cout << BRIGHT_BLUE;
+    cout << "\n┌─────────────────────────────────────────────────────────────────────┐\n";
+    cout << "│" << BRIGHT_GREEN << "  ██████╗ ██╗   ██╗██████╗ ██╗      ██████╗   " << BRIGHT_BLUE << "                       │\n";
+    cout << "│" << BRIGHT_GREEN << "  ██╔══██╗██║   ██║██╔══██╗██║      ██╔════╝   " << BRIGHT_BLUE << "                      │\n";
+    cout << "│" << BRIGHT_GREEN << "  ██████╔╝██║   ██║██████╔╝██║████╗ ██║        " << BRIGHT_BLUE << "                      │\n";
+    cout << "│" << BRIGHT_GREEN << "  ██╔══██╗██║   ██║██╔══██╗██║╚═══╝ ██║        " << BRIGHT_BLUE << "                      │\n";
+    cout << "│" << BRIGHT_GREEN << "  ██║  ██║╚██████╔╝██████╔╝██║      ╚██████╗   " << BRIGHT_BLUE << "                      │\n";
+    cout << "│" << BRIGHT_GREEN << "  ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝       ╚═════╝   " << BRIGHT_BLUE << "                      │\n";
+    cout << "│                                                                     │\n";
+    cout << "│" << BRIGHT_MAGENTA << "        SISTEMA DE CIFRADO- v1.0             " << BRIGHT_BLUE << "                        │\n";
+    cout << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
+}
     
     string getInput(const string& prompt) {
         cout << prompt;
