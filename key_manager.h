@@ -53,7 +53,7 @@ using namespace std;
 #endif
 
 // ***********************************************
-// CLASE  MLOCK PROTECION DE MEMORIA
+// CLASE  MLOCK PROTECION DE MEMORIA //
 
 class MemoryLC {
 private:
@@ -111,7 +111,7 @@ public:
 };
 
 // ************************************
-// COMPARACION
+// COMPARACION //
 inline bool secure_memcmp(const uint8_t* a, const uint8_t* b, size_t len) {
     volatile uint8_t result = 0;
     for (size_t i = 0; i < len; ++i) {
@@ -121,7 +121,7 @@ inline bool secure_memcmp(const uint8_t* a, const uint8_t* b, size_t len) {
 }
 
 // ******************************************************
-// SISTEMA DE CONTRASEÑAS SEMI-VISIBLE
+// SISTEMA DE CONTRASEÑAS SEMI-VISIBLE //
 
 class KeySecureInput {
 private:
@@ -145,24 +145,15 @@ private:
         }
     }
 
-    static void clearLine(const string& prompt, size_t currentLength) {
-        cout << "\r";
-        cout << string(prompt.length() + currentLength + 1, ' ');
-        cout << "\r" << prompt << flush;
-    }
-
-    static void redrawLine(const string& prompt, size_t asteriskCount) {
-        cout << "\r" << prompt << string(asteriskCount, '*') << flush;
-    }
-
 public:
-    static Botan::secure_vector<uint8_t> readAccessCode(const string& prompt = "Clave de acceso: ") {
+    static Botan::secure_vector<uint8_t> readAccessCode(const string& prompt = "Clave de acceso: ", const string& prefix = "") {
         setRawMode(true);
         Botan::secure_vector<uint8_t> code;
         char c;
         const int SHOW_TIME_MS = 50;  
 
-        cout << prompt << flush;
+        // Imprimimos el prefijo (la barra │) y el texto desde la columna cero
+        cout << "\r" << prefix << prompt << flush;
 
         while (true) {
             ssize_t result = read(STDIN_FILENO, &c, 1);
@@ -177,8 +168,8 @@ public:
             if (c == 127 || c == '\b') {
                 if (!code.empty()) {
                     code.pop_back();
-                    clearLine(prompt, code.size() + 1);
-                    redrawLine(prompt, code.size());
+                    // \033[K borra desde el cursor hasta el final de la línea para no dejar basura
+                    cout << "\r" << prefix << prompt << string(code.size(), '*') << "\033[K" << flush;
                 }
                 continue;
             }
@@ -187,7 +178,7 @@ public:
             this_thread::sleep_for(chrono::milliseconds(SHOW_TIME_MS));
             
             code.push_back(static_cast<uint8_t>(c));
-            redrawLine(prompt, code.size());
+            cout << "\r" << prefix << prompt << string(code.size(), '*') << "\033[K" << flush;
         }
 
         setRawMode(false);
@@ -198,14 +189,15 @@ public:
 
     static Botan::secure_vector<uint8_t> readAccessCodeWithConfirm(
         const string& prompt = "Clave de acceso: ", 
-        const string& confirmPrompt = "Confirmar clave de acceso: ") {
+        const string& confirmPrompt = "Confirmar clave de acceso: ",
+        const string& prefix = "") {
         
         Botan::secure_vector<uint8_t> code1, code2;
         int attempts = 0;
         const int MAX_ATTEMPTS = 3;
 
         while (attempts < MAX_ATTEMPTS) {
-            code1 = readAccessCode(prompt);
+            code1 = readAccessCode(prompt, prefix);
             
             if (code1.empty()) {
                 cout << RED << "✗ La clave no puede estar vacía" << RESET << endl;
@@ -220,7 +212,7 @@ public:
                 continue;
             }
 
-            code2 = readAccessCode(confirmPrompt);
+            code2 = readAccessCode(confirmPrompt, prefix);
 
             bool match = (code1.size() == code2.size() && 
                          secure_memcmp(code1.data(), code2.data(), code1.size()));
@@ -241,8 +233,8 @@ public:
         return Botan::secure_vector<uint8_t>();
     }
 
-    static string readStringNormal(const string& prompt) {
-        cout << prompt;
+    static string readStringNormal(const string& prompt, const string& prefix = "") {
+        cout << prefix << prompt;
         string input;
         getline(cin, input);
         return input;
@@ -250,7 +242,7 @@ public:
 };
 
 // *************************************************
-// CRYPTO UTILITIES CON ARGON2ID
+// CRYPTO ARGON2ID //
 
 class KeyCryptoUtils {
 public:
@@ -272,7 +264,6 @@ public:
         }
     }
 
-    // NUEVO METODO PARA GENERAR BYTES PUROS EN VEZ DE HEX
     static Botan::secure_vector<uint8_t> generateRandomBytes(int bytes = 32) {
         try {
             Botan::AutoSeeded_RNG rng;
@@ -422,11 +413,11 @@ public:
 };
 
 // *****************************************************
-// Estructura para almacenar información de claves
+// Estructura para almacenar información de claves //
 
 struct KeyInfo {
     string key_name;
-    Botan::secure_vector<uint8_t> key_value;  // 🚨 CRITICO FIX: Ahora es un secure_vector
+    Botan::secure_vector<uint8_t> key_value;  
     string key_type;
     string key_usage;
     time_t created_at;
@@ -519,7 +510,6 @@ struct KeyInfo {
             void* ptr = const_cast<uint8_t*>(access_code.data());
             memory_locker = make_unique<MemoryLC>(ptr, access_code.size());
         }
-        // Botan::secure_vector ya implementa mlock() de manera nativa para key_value.
     }
     
     void unlockMemory() const {
@@ -534,7 +524,6 @@ struct KeyInfo {
     string serialize() const {
         stringstream ss;
         ss << key_name << "\n";
-        // Convertimos a hexadecimal SOLO para la persistencia antes de cifrar
         ss << Botan::hex_encode(key_value) << "\n"; 
         ss << key_type << "\n";
         ss << key_usage << "\n";
@@ -556,9 +545,8 @@ struct KeyInfo {
             string line;
             
             if (!getline(ss, key_name)) return false;
-            
             if (!getline(ss, line)) return false;
-            // Recuperamos desde Hex directo al secure_vector
+            
             auto decoded_key = Botan::hex_decode(line);
             key_value.assign(decoded_key.begin(), decoded_key.end());
             
@@ -623,7 +611,8 @@ struct KeyInfo {
 };
 
 // *************************************************************
-// CLASE PRINCIPAL DEL GESTOR DE CLAVES
+// CLASE PRINCIPAL DEL GESTOR DE CLAVES //
+
 class KeyManager {
 private:
     string username;
@@ -837,11 +826,10 @@ private:
             return true;
         }
         
-        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "VERIFICACIÓN DE SEGURIDAD" << BRIGHT_BLUE << "]─────────────────────────────┐\n";
-        cout << "│" << RESET;
+        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "VERIFICACIÓN DE SEGURIDAD" << BRIGHT_BLUE << "]─────────────────────────────────────────┐\n";
         
         Botan::secure_vector<uint8_t> inputPass = 
-            KeySecureInput::readAccessCode("Ingrese su contraseña:");
+            KeySecureInput::readAccessCode("Ingrese su contraseña: ", string(BRIGHT_BLUE) + "│ " + string(RESET));
         
         cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << endl;
         
@@ -872,11 +860,19 @@ private:
         cout << "┌─────────────────────────────────────────────────────────────────────┐\n";
         cout << "│" << BRIGHT_GREEN << "                    GESTOR DE CLAVES AES-256                      " << BRIGHT_BLUE << "│\n";
         cout << "├─────────────────────────────────────────────────────────────────────┤\n";
-        cout << "│" << RESET << "  Usuario: " << BRIGHT_MAGENTA << username << RESET << "                                           │\n";
-        cout << "│" << RESET << "  Claves almacenadas: " << BRIGHT_CYAN << keys.size() << RESET << "                                │\n";
+        
+        auto print_padded = [](const string& prefix, const string& val, const string& valColor) {
+            int visible_len = prefix.length() + val.length();
+            int spaces = 69 - visible_len;
+            if (spaces < 0) spaces = 0;
+            cout << "│" << RESET << prefix << valColor << val << string(spaces, ' ') << BRIGHT_BLUE << "│\n";
+        };
+
+        print_padded("  Usuario: ", username, BRIGHT_MAGENTA);
+        print_padded("  Claves almacenadas: ", to_string(keys.size()), BRIGHT_CYAN);
         
         if (KeyCryptoUtils::isArgon2Available()) {
-            cout << "│" << BRIGHT_GREEN << "  Protección: Argon2id + AES-256-GCM                          " << BRIGHT_BLUE << "│\n";
+            cout << "│" << BRIGHT_GREEN << "  Protección: Argon2id + AES-256-GCM                               " << BRIGHT_BLUE << "│\n";
         }
         
         cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
@@ -889,10 +885,8 @@ private:
         cout << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
         
         string keyName;
-        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "NOMBRE DE LA CLAVE" << BRIGHT_BLUE << "]──────────────────────────────────┐\n";
-        cout << "│ " << RESET;
-        cout << "Nombre para identificar la clave: ";
-        keyName = KeySecureInput::readStringNormal("");
+        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "NOMBRE DE LA CLAVE" << BRIGHT_BLUE << "]────────────────────────────────────────────────┐\n";
+        keyName = KeySecureInput::readStringNormal("Nombre para identificar la clave: ", string(BRIGHT_BLUE) + "│ " + string(RESET));
         cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << endl;
         
         if (keyName.empty()) {
@@ -906,22 +900,24 @@ private:
         }
         
         string keyUsage;
-        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "USO DE LA CLAVE" << BRIGHT_BLUE << "]─────────────────────────────────────┐\n";
-        cout << "│ " << RESET;
-        cout << "Para qué usará esta clave: ";
-        keyUsage = KeySecureInput::readStringNormal("");
+        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "USO DE LA CLAVE" << BRIGHT_BLUE << "]───────────────────────────────────────────────────┐\n";
+        keyUsage = KeySecureInput::readStringNormal("Para qué usará esta clave: ", string(BRIGHT_BLUE) + "│ " + string(RESET));
         cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << endl;
         
         if (keyUsage.empty()) {
-            keyUsage = "Cifrado de unidades";
+            keyUsage = "Cifrado de unidades/Cifrador universal";
         }
         
-        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "CLAVE DE ACCESO" << BRIGHT_BLUE << "]───────────────────────────────────┐\n";
-        cout << "│" << RESET << "  Configure una clave de acceso para esta clave.                     " << RESET << "│\n";
-        cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
+        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "CLAVE DE ACCESO" << BRIGHT_BLUE << "]───────────────────────────────────────────────────┐\n";
+        cout << "│" << RESET << "  Configure una clave de acceso para esta clave.                     " << BRIGHT_BLUE << "│\n";
         
         Botan::secure_vector<uint8_t> accessCode = 
-            KeySecureInput::readAccessCodeWithConfirm("Clave de acceso: ", "Confirmar clave de acceso: ");
+            KeySecureInput::readAccessCodeWithConfirm(
+                "Clave de acceso: ", 
+                "Confirmar clave de acceso: ", 
+                string(BRIGHT_BLUE) + "│ " + string(RESET)
+            );
+        cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
         
         if (accessCode.empty()) {
             cout << RED << "\n✗ La clave de acceso no puede estar vacía" << RESET << endl;
@@ -930,7 +926,6 @@ private:
         
         cout << MAGENTA << "\nGenerando clave AES-256..." << RESET << endl;
         
-        // Generamos desde 
         Botan::secure_vector<uint8_t> keyValue = KeyCryptoUtils::generateRandomBytes(32);
         if (keyValue.empty()) {
             cout << RED << "\n✗ Error generando la clave criptográfica" << RESET << endl;
@@ -962,10 +957,24 @@ private:
             cout << "┌─────────────────────────────────────────────────────────────────────┐\n";
             cout << "│" << BRIGHT_GREEN << "                   CLAVE CREADA EXITOSAMENTE                     " << GREEN << "│\n";
             cout << "├─────────────────────────────────────────────────────────────────────┤\n";
-            cout << "│" << RESET << "  Nombre: " << BRIGHT_MAGENTA << keyName << RESET << "                                           │\n";
-            cout << "│" << RESET << "  Tipo: " << BRIGHT_CYAN << "AES-256 (256 bits)" << RESET << "                               │\n";
-            cout << "│" << RESET << "  Uso: " << BRIGHT_GREEN << keyUsage << RESET << "                                          │\n";
-            cout << "│" << RESET << "  Estado: " << RED << "INACTIVA" << RESET << "                                             │\n";
+            
+            auto print_padded_line = [](const string& prefix, const string& value, const string& valColor) {
+                int visible_len = prefix.length() + value.length();
+                int spaces = 69 - visible_len;
+                if (spaces < 0) spaces = 0;
+                cout << "│" << RESET << prefix << valColor << value << RESET << string(spaces, ' ') << GREEN << "│\n";
+            };
+            
+            print_padded_line("  Nombre: ", keyName, BRIGHT_MAGENTA);
+            print_padded_line("  Tipo: ", "AES-256 (256 bits)", BRIGHT_CYAN);
+            print_padded_line("  Uso: ", keyUsage, BRIGHT_GREEN);
+            print_padded_line("  Estado: ", "INACTIVA", RED);
+            
+            cout << "├─────────────────────────────────────────────────────────────────────┤\n";
+            cout << "│" << BRIGHT_BLUE << "   ████╗                                                             " << GREEN << "│\n";
+            cout << "│" << BRIGHT_BLUE << "  ██╔═████████████╗                                                  " << GREEN << "│\n";
+            cout << "│" << BRIGHT_BLUE << "  ██║   ██╔══██╔══██║                                                " << GREEN << "│\n";
+            cout << "│" << BRIGHT_BLUE << "   ╚████╝ ╚═╝  ╚═╝                                                   " << GREEN << "│\n";
             cout << GREEN << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
         } else {
             cout << RED << "\n✗ Error guardando la clave" << RESET << endl;
@@ -996,10 +1005,8 @@ private:
             index++;
         }
         
-        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "SELECCIONAR CLAVE" << BRIGHT_BLUE << "]─────────────────────────────────────┐\n";
-        cout << "│ " << RESET;
-        cout << "Seleccione el número de la clave: ";
-        string choiceStr = KeySecureInput::readStringNormal("");
+        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "SELECCIONAR CLAVE" << BRIGHT_BLUE << "]─────────────────────────────────────────────────┐\n";
+        string choiceStr = KeySecureInput::readStringNormal("Seleccione el número de la clave: ", string(BRIGHT_BLUE) + "│ " + string(RESET));
         cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << endl;
         
         try {
@@ -1013,8 +1020,7 @@ private:
             KeyInfo& key = keys[selectedKey];
             
             if (key.is_active) {
-                cout << "¿Desactivar la clave \"" << key.key_name << "\"? (s/N): ";
-                string confirm = KeySecureInput::readStringNormal("");
+                string confirm = KeySecureInput::readStringNormal("¿Desactivar la clave \"" + key.key_name + "\"? (s/N): ");
                 
                 if (confirm != "s" && confirm != "S") {
                     cout << "Operación cancelada." << endl;
@@ -1035,7 +1041,7 @@ private:
             
             if (!key.is_active && key.requires_access) {
                 Botan::secure_vector<uint8_t> inputCode = 
-                    KeySecureInput::readAccessCode("Clave de acceso para \"" + key.key_name + "\": ");
+                    KeySecureInput::readAccessCode("Clave de acceso para \"" + key.key_name + "\": ", string(BRIGHT_BLUE) + "│ " + string(RESET));
                 
                 unique_ptr<MemoryLC> input_locker;
                 if (!inputCode.empty()) {
@@ -1055,8 +1061,7 @@ private:
                 inputCode.clear();
                 input_locker.reset();
                 
-                cout << "¿Activar la clave \"" << key.key_name << "\"? (s/N): ";
-                string confirm = KeySecureInput::readStringNormal("");
+                string confirm = KeySecureInput::readStringNormal("¿Activar la clave \"" + key.key_name + "\"? (s/N): ");
                 
                 if (confirm != "s" && confirm != "S") {
                     cout << "Operación cancelada." << endl;
@@ -1106,9 +1111,20 @@ private:
             index++;
         }
         
+        int total = keys.size();
+        int inactiveCount = total - activeCount;
+        
+        // Calculamos los espacios dinámicamente para alinear la barra derecha
+        string tStr = to_string(total);
+        string aStr = to_string(activeCount);
+        string iStr = to_string(inactiveCount);
+        int visible_len = string("  Total: ").length() + tStr.length() + string(" claves | Activas: ").length() + aStr.length() + string(" | Inactivas: ").length() + iStr.length();
+        int spaces = 69 - visible_len;
+        if (spaces < 0) spaces = 0;
+
         cout << BRIGHT_BLUE;
         cout << "┌─────────────────────────────────────────────────────────────────────┐\n";
-        cout << "│" << RESET << "  Total: " << BRIGHT_CYAN << keys.size() << RESET << " claves | Activas: " << BRIGHT_GREEN << activeCount << RESET << " | Inactivas: " << BRIGHT_RED << (keys.size() - activeCount) << RESET << "          │\n";
+        cout << "│" << RESET << "  Total: " << BRIGHT_CYAN << tStr << RESET << " claves | Activas: " << BRIGHT_GREEN << aStr << RESET << " | Inactivas: " << BRIGHT_RED << iStr << RESET << string(spaces, ' ') << BRIGHT_BLUE << "│\n";
         cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
         
         cout << "\nPresione Enter para continuar...";
@@ -1135,10 +1151,8 @@ private:
             index++;
         }
         
-        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "SELECCIONAR CLAVE A ELIMINAR" << BRIGHT_BLUE << "]──────────────────────────┐\n";
-        cout << "│ " << RESET;
-        cout << "Seleccione el número de la clave a eliminar: ";
-        string choiceStr = KeySecureInput::readStringNormal("");
+        cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "SELECCIONAR CLAVE A ELIMINAR" << BRIGHT_BLUE << "]──────────────────────────────────────┐\n";
+        string choiceStr = KeySecureInput::readStringNormal("Seleccione el número de la clave a eliminar: ", string(BRIGHT_BLUE) + "│ " + string(RESET));
         cout << BRIGHT_BLUE << "└─────────────────────────────────────────────────────────────────────┘" << RESET << endl;
         
         try {
@@ -1152,8 +1166,7 @@ private:
             KeyInfo& key = keys[selectedKey];
             
             cout << RED << "\n⚠ ADVERTENCIA: Esta acción no se puede deshacer." << RESET << endl;
-            cout << "¿Está seguro que desea eliminar la clave \"" << key.key_name << "\"? (s/N): ";
-            string confirm = KeySecureInput::readStringNormal("");
+            string confirm = KeySecureInput::readStringNormal("¿Está seguro que desea eliminar la clave \"" + key.key_name + "\"? (s/N): ");
             
             if (confirm != "s" && confirm != "S") {
                 cout << "Operación cancelada." << endl;
@@ -1162,7 +1175,7 @@ private:
             
             if (key.requires_access && !key.access_code.empty()) {
                 Botan::secure_vector<uint8_t> inputCode = 
-                    KeySecureInput::readAccessCode("Clave de acceso para confirmar: ");
+                    KeySecureInput::readAccessCode("Clave de acceso para confirmar: ", string(BRIGHT_BLUE) + "│ " + string(RESET));
                 
                 unique_ptr<MemoryLC> input_locker;
                 if (!inputCode.empty()) {
@@ -1242,18 +1255,15 @@ public:
         while (true) {
             printKeyManagerHeader();
             
-            cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "OPCIONES" << BRIGHT_BLUE << "]───────────────────────────────────────────────┐\n";
-            cout << "│" << BRIGHT_GREEN << " [1] " << BRIGHT_MAGENTA << " Crear nueva clave AES-256                                 " << BRIGHT_BLUE << "│\n";
-            cout << "│" << BRIGHT_GREEN << " [2] " << BRIGHT_MAGENTA << " Activar/Desactivar clave                                 " << BRIGHT_BLUE << "│\n";
-            cout << "│" << BRIGHT_GREEN << " [3] " << BRIGHT_MAGENTA << " Lista de claves                                          " << BRIGHT_BLUE << "│\n";
-            cout << "│" << BRIGHT_GREEN << " [4] " << BRIGHT_MAGENTA << " Eliminar clave                                           " << BRIGHT_BLUE << "│\n";
-            cout << "│" << BRIGHT_GREEN << " [5] " << BRIGHT_MAGENTA << " Volver                                                   " << BRIGHT_BLUE << "│\n";
+            cout << BRIGHT_BLUE << "\n┌─[" << BRIGHT_MAGENTA << "OPCIONES" << BRIGHT_BLUE << "]──────────────────────────────────────────────────────────┐\n";
+            cout << "│" << BRIGHT_GREEN << " [1] " << BRIGHT_MAGENTA << " Crear nueva clave AES-256                                      " << BRIGHT_BLUE << "│\n";
+            cout << "│" << BRIGHT_GREEN << " [2] " << BRIGHT_MAGENTA << " Activar/Desactivar clave                                       " << BRIGHT_BLUE << "│\n";
+            cout << "│" << BRIGHT_GREEN << " [3] " << BRIGHT_MAGENTA << " Lista de claves                                                " << BRIGHT_BLUE << "│\n";
+            cout << "│" << BRIGHT_GREEN << " [4] " << BRIGHT_MAGENTA << " Eliminar clave                                                 " << BRIGHT_BLUE << "│\n";
+            cout << "│" << BRIGHT_GREEN << " [5] " << BRIGHT_MAGENTA << " Volver                                                         " << BRIGHT_BLUE << "│\n";
             cout << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
             
-            cout << BRIGHT_GREEN << "\nSeleccione opción [" << BRIGHT_MAGENTA << "1-5" << BRIGHT_GREEN << "]: " << RESET;
-            
-            string choice;
-            getline(cin, choice);
+            string choice = KeySecureInput::readStringNormal("Seleccione opción [" + string(BRIGHT_MAGENTA) + "1-5" + string(BRIGHT_GREEN) + "]: " + string(RESET));
             
             if (choice == "1") {
                 createKeyMenu();
@@ -1285,7 +1295,7 @@ public:
         auto it = keys.find(keyName);
         return it != keys.end() && it->second.is_active;
     }
-    // 
+
     Botan::secure_vector<uint8_t> getKeyValue(const string& keyName) const {
         auto it = keys.find(keyName);
         if (it != keys.end() && it->second.is_active) {
