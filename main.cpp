@@ -2,15 +2,17 @@
 
 int main(int argc, char* argv[]) {
     try {
-        // Verificar si  tenemos sudo
+        // AVISO DE RESPONSABILIDAD 
+        std::cout << GREEN << "rubi-c es un codigo abierto y de uso libre no me responsabiliso por el mal uso de la herramiento o perdida de datos es una herramienta en fase alpha\n" << RESET << std::endl;
+        
+        // Verificar si tenemos sudo
         if (geteuid() != 0) {
-            std::cout << YELLOW << "\n⚠ Se requieren permisos de administrador" << RESET << std::endl;
+            std::cout << YELLOW << "Se requieren permisos de administrador" << RESET << std::endl;
             std::cout << CYAN << "Reiniciando con sudo..." << RESET << std::endl;
             
             // Reconstruir con sudo
             std::string cmd = "sudo ";
             cmd += argv[0];
-            
             
             for (int i = 1; i < argc; i++) {
                 cmd += " '" + std::string(argv[i]) + "'";
