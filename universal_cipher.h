@@ -43,6 +43,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <csignal>
+#include <cpuid.h>
 #include <botan/auto_rng.h>
 #include <botan/secmem.h>
 #include <botan/hex.h>
@@ -59,7 +60,50 @@
 // Forward declaration
 class KeyManager;
 
-// PERMISOS //quitarlo poque main verifica
+// DETECCIÓN DE HARDWARE (Renombrado a CipherHWDetect para evitar colisión con unit_encryptor.h)
+class CipherHWDetect {
+public:
+    static bool hasAESNI() { static bool aesni = check_aesni(); return aesni; }
+    static bool hasAVX2() { static bool avx2 = check_avx2(); return avx2; }
+    static bool hasAVX512() { static bool avx512 = check_avx512(); return avx512; }
+    static int getCoreCount() { static int cores = std::thread::hardware_concurrency(); return cores > 0 ? cores : 4; }
+    static std::string getCPUInfo() {
+        std::stringstream ss;
+        ss << "Nucleos: " << getCoreCount();
+        if (hasAESNI()) ss << " | AES-NI: Si"; else ss << " | AES-NI: No";
+        if (hasAVX512()) ss << " | SIMD: AVX-512";
+        else if (hasAVX2()) ss << " | SIMD: AVX2";
+        else ss << " | SIMD: SSE";
+        return ss.str();
+    }
+private:
+    static bool check_aesni() {
+        unsigned int eax, ebx, ecx, edx;
+        if (__get_cpuid_max(0, nullptr) >= 1) {
+            __cpuid_count(1, 0, eax, ebx, ecx, edx);
+            return (ecx & (1 << 25)) != 0;
+        }
+        return false;
+    }
+    static bool check_avx2() {
+        unsigned int eax, ebx, ecx, edx;
+        if (__get_cpuid_max(0, nullptr) >= 7) {
+            __cpuid_count(7, 0, eax, ebx, ecx, edx);
+            return (ebx & (1 << 5)) != 0;
+        }
+        return false;
+    }
+    static bool check_avx512() {
+        unsigned int eax, ebx, ecx, edx;
+        if (__get_cpuid_max(0, nullptr) >= 7) {
+            __cpuid_count(7, 0, eax, ebx, ecx, edx);
+            return (ebx & ((1 << 16) | (1 << 30))) == ((1 << 16) | (1 << 30));
+        }
+        return false;
+    }
+};
+
+// PERMISOS
 class UserPermissions {
 public:
     static void fixFilePermissions(const std::string& path) {
@@ -68,8 +112,10 @@ public:
         const char* sudo_gid = getenv("SUDO_GID");
         gid_t gid = sudo_gid ? static_cast<gid_t>(std::stoul(sudo_gid)) : getgid();
         
-        // Intentar cambiar permisos, ignorar errores (best effort)
-        chown(path.c_str(), uid, gid);
+        // Intentar cambiar permisos, ignorar errores silenciosamente para evitar warning
+        if (chown(path.c_str(), uid, gid) == -1) {
+            // Ignorado intencionalmente (best effort)
+        }
         chmod(path.c_str(), S_IRUSR | S_IWUSR);
     }
 };
@@ -139,8 +185,7 @@ public:
     FileRAII& operator=(const FileRAII&) = delete;
 };
 
-//*************************************** 
-// RAII MAPEAR MEMORIA
+//*************************************** // RAII MAPEAR MEMORIA
 class MMapRAII {
 private:
     void* data;
@@ -251,6 +296,7 @@ public:
     MemoryLockRAII(const MemoryLockRAII&) = delete;
     MemoryLockRAII& operator=(const MemoryLockRAII&) = delete;
 };
+
 //************************************************ */
 // CONFIGURACIÓN DE HILOS
 
@@ -270,10 +316,15 @@ struct ThreadCfg {
             config.reserved_os = 0;
         }
         else if (system_threads <= 4) {
-            config.io_threads = 2;
+            config.io_threads = 1;
             config.crypto_threads = 2;
-            config.reserved_os = 0;
-        }//meter de 6 hilos xd
+            config.reserved_os = 1;
+        }
+        else if (system_threads == 6) {
+            config.io_threads = 2;
+            config.crypto_threads = 3;
+            config.reserved_os = 1;
+        }
         else if (system_threads <= 8) {
             config.io_threads = 2;
             config.crypto_threads = 5;
@@ -2162,8 +2213,15 @@ public:
             std::cout << "\n┌─────────────────────────────────────────────────────────────────────┐\n";
             std::cout << "│" << GREEN << BOLD << "                       CIFRADO UNIVERSAL                            " << BLUE << "│\n";
             std::cout << "├─────────────────────────────────────────────────────────────────────┤\n";
-            std::cout << "│" << MAGENTA << "  AES-256-GCM | " << (cipher && cipher->has_aes_ni() ? "AES-NI: ✓" : "AES-NI: ✗") << BLUE << "                              │\n";
-            std::cout << "│" << CYAN << "  Hilos: " << config.thread_config.crypto_threads << " | Paralelo: " << config.max_parallel_files << " archivos" << BLUE << "                         │\n";
+            
+            // Fix para el llamado de la clase renombrada
+            std::string hwInfo = "  AES-256-GCM | " + CipherHWDetect::getCPUInfo();
+            std::string pad1(std::max(0, 69 - (int)hwInfo.length()), ' ');
+            std::cout << "│" << MAGENTA << hwInfo << pad1 << BLUE << "│\n";
+            
+            std::string thInfo = "  Hilos: " + std::to_string(config.thread_config.crypto_threads) + " | Paralelo: " + std::to_string(config.max_parallel_files) + " archivos";
+            std::string pad2(std::max(0, 69 - (int)thInfo.length()), ' ');
+            std::cout << "│" << CYAN << thInfo << pad2 << BLUE << "│\n";
             std::cout << "└─────────────────────────────────────────────────────────────────────┘" << RESET << "\n";
             
             std::cout << BLUE << "\n┌─[" << MAGENTA << "MENÚ PRINCIPAL" << BLUE << "]───────────────────────────────────────────┐\n";
